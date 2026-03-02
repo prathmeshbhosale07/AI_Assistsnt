@@ -1,0 +1,17 @@
+{
+  "appTitle": "Virtual Assistant",
+  "login": "Login",
+  "register": "Register",
+  "email": "Email",
+  "password": "Password",
+  "name": "Name",
+  "logout": "Logout",
+  "settings": "Settings",
+  "send": "Send",
+  "placeholder": "Ask anything…",
+  "assistantName": "Assistant name",
+  "language": "Language",
+  "avatar": "Avatar",
+  "save": "Save"
+}
+

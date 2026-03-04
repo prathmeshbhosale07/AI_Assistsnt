@@ -35,6 +35,20 @@ export const fetchHistory = createAsyncThunk("chat/history", async (_, thunkAPI)
   }
 });
 
+export const deleteSession = createAsyncThunk(
+  "chat/deleteSession",
+  async (sessionId, thunkAPI) => {
+    try {
+      const { data } = await axiosClient.delete(`/chat/session/${sessionId}`);
+      return data; // { message, sessionId }
+    } catch (err) {
+      return thunkAPI.rejectWithValue(
+        err?.response?.data?.message || "Failed to delete session"
+      );
+    }
+  }
+);
+
 const chatSlice = createSlice({
   name: "chat",
   initialState,
@@ -92,6 +106,16 @@ const chatSlice = createSlice({
       })
       .addCase(fetchHistory.rejected, (state, action) => {
         state.error = action.payload || "Failed to fetch history";
+      })
+      .addCase(deleteSession.fulfilled, (state, action) => {
+        const deletedId = action.payload.sessionId;
+        state.sessions = state.sessions.filter(s => s._id !== deletedId);
+        if (state.sessionId === deletedId) {
+          state.sessionId = null;
+          state.messages = [];
+          state.lastAction = "NONE";
+          state.error = null;
+        }
       });
   },
 });

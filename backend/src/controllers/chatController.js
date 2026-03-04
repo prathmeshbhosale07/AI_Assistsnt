@@ -56,3 +56,20 @@ export const getHistory = async (req, res) => {
 
   res.json(sessions);
 };
+
+export const deleteSession = async (req, res) => {
+  const { id } = req.params;
+  
+  const session = await ChatSession.findOne({
+    _id: id,
+    user: req.user._id
+  });
+
+  if (!session) {
+    return res.status(404).json({ message: "Session not found" });
+  }
+
+  await session.deleteOne();
+  
+  res.json({ message: "Session deleted successfully", sessionId: id });
+};

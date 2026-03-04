@@ -4,8 +4,9 @@ import Layout from "../components/Layout.jsx";
 import MessageList from "../components/chat/MessageList.jsx";
 import MessageInput from "../components/chat/MessageInput.jsx";
 import RobotAvatar from "../components/chat/RobotAvatar.jsx";
-import { addLocalUserMessage, clearChat, clearLastAction, fetchHistory, loadSession, sendMessage } from "../store/slices/chatSlice";
+import { addLocalUserMessage, clearChat, clearLastAction, fetchHistory, loadSession, sendMessage, deleteSession } from "../store/slices/chatSlice";
 import { loadFromUser } from "../store/slices/preferencesSlice";
+import { detectTopic, TOPIC_BACKGROUNDS } from "../utils/topicDetection";
 
 export default function ChatPage() {
   const dispatch = useAppDispatch();
@@ -16,6 +17,7 @@ export default function ChatPage() {
   const [robotStatus, setRobotStatus] = useState("idle");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isTTSEnabled, setIsTTSEnabled] = useState(false);
+  const [currentTopic, setCurrentTopic] = useState("default");
   const previousMessagesLength = useRef(0);
 
   const audio = useMemo(() => {
@@ -73,6 +75,23 @@ export default function ChatPage() {
     previousMessagesLength.current = messages.length;
   }, [messages, loading, prefs.voiceProfile, isTTSEnabled]);
 
+  // Topic detection logic based on user messages
+  useEffect(() => {
+    if (messages.length > 0) {
+      // Find the last user message to determine topic
+      const lastUserMsg = [...messages].reverse().find(m => m.role === "user");
+      if (lastUserMsg && lastUserMsg.content) {
+        const detected = detectTopic(lastUserMsg.content);
+        if (detected) {
+          setCurrentTopic(detected);
+        }
+      }
+    } else {
+      // Revert to default on new chat
+      setCurrentTopic("default");
+    }
+  }, [messages]);
+
   const onSend = (content) => {
     dispatch(addLocalUserMessage(content));
     dispatch(sendMessage({ sessionId, content }));
@@ -80,8 +99,24 @@ export default function ChatPage() {
 
   return (
     <Layout>
-      <div className="flex h-full flex-col relative bg-white dark:bg-slate-950">
+      <div className="flex h-full flex-col relative bg-transparent overflow-hidden">
         
+        {/* Dynamic Backgrounds */}
+        <div className="absolute inset-0 z-0">
+          {Object.entries(TOPIC_BACKGROUNDS).map(([topicKey, bgUrl]) => (
+            <img 
+              key={topicKey}
+              src={bgUrl}
+              alt={`${topicKey} background`}
+              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out ${
+                currentTopic === topicKey ? "opacity-100" : "opacity-0"
+              }`}
+            />
+          ))}
+          {/* Dark / blur overlay for text contrast relative to the image */}
+          <div className="absolute inset-0 bg-slate-100/70 dark:bg-slate-950/80 backdrop-blur-[2px] transition-colors" />
+        </div>
+
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 w-full flex justify-center pointer-events-none">
           <div className="pointer-events-auto scale-[0.6] origin-top opacity-50 hover:opacity-100 transition-opacity">
             <RobotAvatar status={robotStatus} />
@@ -100,7 +135,7 @@ export default function ChatPage() {
           <button 
             onClick={() => {
               dispatch(clearChat());
-              if(window.innerWidth < 768) setIsSidebarOpen(false);
+              setIsSidebarOpen(false);
             }}
             className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/50 rounded-lg shadow-sm text-sm font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition"
           >
@@ -141,25 +176,43 @@ export default function ChatPage() {
               <div className="flex-1 overflow-y-auto p-2 space-y-1">
                 {sessions && sessions.length > 0 ? (
                   sessions.map((session) => (
-                    <button
+                    <div
                       key={session._id}
-                      onClick={() => {
-                        dispatch(loadSession(session));
-                        setIsSidebarOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                      className={`group flex items-center justify-between w-full rounded-lg transition-colors ${
                         session._id === sessionId 
-                          ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium" 
-                          : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          ? "bg-indigo-50 dark:bg-indigo-900/30 font-medium" 
+                          : "hover:bg-slate-100 dark:hover:bg-slate-800"
                       }`}
                     >
-                      <div className="truncate font-medium">
-                         {session.messages?.find?.(m => m.role === "user")?.content || "New conversation"}
-                      </div>
-                      <div className="text-[10px] opacity-70 mt-1">
-                        {new Date(session.updatedAt || session.createdAt || Date.now()).toLocaleDateString()}
-                      </div>
-                    </button>
+                      <button
+                        onClick={() => {
+                          dispatch(loadSession(session));
+                          setIsSidebarOpen(false);
+                        }}
+                        className={`flex-1 text-left px-3 py-2 rounded-lg text-sm truncate pr-2 ${
+                          session._id === sessionId
+                            ? "text-indigo-700 dark:text-indigo-300"
+                            : "text-slate-600 dark:text-slate-400"
+                        }`}
+                      >
+                        <div className="truncate font-medium">
+                           {session.messages?.find?.(m => m.role === "user")?.content || "New conversation"}
+                        </div>
+                        <div className="text-[10px] opacity-70 mt-1">
+                          {new Date(session.updatedAt || session.createdAt || Date.now()).toLocaleDateString()}
+                        </div>
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          dispatch(deleteSession(session._id));
+                        }}
+                        className="p-2 mr-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-md opacity-0 group-hover:opacity-100 transition-all focus:opacity-100 flex-shrink-0"
+                        title="Delete Chat"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    </div>
                   ))
                 ) : (
                   <div className="p-4 text-center text-sm text-slate-500">No history found</div>
